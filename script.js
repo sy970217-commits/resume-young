@@ -1,432 +1,353 @@
-// =========================================================
-// 방문자 화면: Supabase에서 데이터를 읽어 와 화면을 채운다.
-// =========================================================
+// Supabase 주소와 공개 키 (공개 키라서 화면 파일에 넣어도 된다)
+var SUPABASE_URL = 'https://tjcfqzggawvoocvwtois.supabase.co';
+var SUPABASE_KEY = 'sb_publishable_EIw_nO7UbRAfxn2bVqRAcA_UoSl6aCm';
 
-// Supabase 연결 정보 (공개 키라서 파일에 넣어도 괜찮다. 비밀 키는 절대 넣지 않는다.)
-const SUPABASE_URL = 'https://tjcfqzggawvoocvwtois.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_EIw_nO7UbRAfxn2bVqRAcA_UoSl6aCm';
-
-// 브라우저에 저장해 두는 값의 이름
-const CLIENT_ID_KEY = 'resume_client_id'; // 이 브라우저의 좋아요용 번호
-const LIKED_KEY = 'resume_liked';         // 이 브라우저가 좋아요를 누른 카드 번호들
-
-const HEART_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.3-9.2C1.5 8 3.6 4.5 7.1 4.5c2 0 3.6 1.1 4.9 2.8 1.3-1.7 2.9-2.8 4.9-2.8 3.5 0 5.6 3.5 4.4 6.8-1.8 4.6-9.3 9.2-9.3 9.2z"/></svg>';
-
-const state = {
-  clientId: '',
-  counts: {},       // 카드 id → 좋아요 수
-  liked: new Set(), // 이 브라우저가 이미 좋아요한 카드 id
+var ICONS = {
+  person: 'M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2c-4 0-8 2-8 5v3h16v-3c0-3-4-5-8-5z',
+  mail: 'M2 5h20v14H2V5zm2 2v.5l8 5 8-5V7H4z',
+  phone: 'M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11 11 0 0 0 3.6.6 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.6 3.6a1 1 0 0 1-.25 1l-2.25 2.2z',
+  pin: 'M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.500A2.5 2.5 0 1 1 12 6.500a2.5 2.5 0 0 1 0 5z'
 };
 
-
-// ---------------------------------------------------------
-// Supabase 부르기 (브라우저 fetch로 직접)
-// ---------------------------------------------------------
-async function api(path, options = {}) {
-  const headers = { apikey: SUPABASE_KEY, ...options.headers };
-  if (options.body) headers['Content-Type'] = 'application/json';
-
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+// ---------- 도우미 ----------
+function api(path, options) {
+  options = options || {};
+  var headers = { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' };
+  for (var k in options.headers) { headers[k] = options.headers[k]; }
+  return fetch(SUPABASE_URL + '/rest/v1/' + path, {
     method: options.method || 'GET',
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined,
+    headers: headers,
+    body: options.body
   });
-
-  if (!res.ok) {
-    const error = new Error(`Supabase 요청 실패 (${res.status})`);
-    error.status = res.status;
-    throw error;
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
 }
 
+function getJson(path) {
+  return api(path).then(function (res) {
+    if (!res.ok) { throw new Error('불러오기 실패: ' + path); }
+    return res.json();
+  });
+}
 
-// ---------------------------------------------------------
-// 작은 도우미들
-// ---------------------------------------------------------
-const $ = (id) => document.getElementById(id);
-
-// 태그를 만들고 글자를 넣는다. (글자는 textContent로 넣어서 HTML로 해석되지 않게 한다)
 function el(tag, className, text) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined && text !== null) node.textContent = text;
+  var node = document.createElement(tag);
+  if (className) { node.className = className; }
+  if (text !== undefined && text !== null) { node.textContent = text; }
   return node;
 }
 
-// http/https 주소만 쓴다
-function safeUrl(url) {
-  if (!url) return '';
-  try {
-    const parsed = new URL(url, location.href);
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : '';
-  } catch {
-    return '';
-  }
+function svgIcon(pathData) {
+  var ns = 'http://www.w3.org/2000/svg';
+  var svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  var path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', pathData);
+  svg.appendChild(path);
+  return svg;
 }
 
-// 글자 수 (한글·이모지도 한 글자로 센다)
-const charLength = (text) => Array.from(text).length;
-
-function readStorage(key) {
-  try { return localStorage.getItem(key); } catch { return null; }
-}
-function writeStorage(key, value) {
-  try { localStorage.setItem(key, value); } catch { /* 저장이 막힌 브라우저면 넘어간다 */ }
+function isWebUrl(url) {
+  return typeof url === 'string' && /^https?:\/\//i.test(url);
 }
 
-let toastTimer;
-function showToast(message) {
-  const toast = $('toast');
-  toast.textContent = message;
-  toast.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { toast.hidden = true; }, 2600);
+function storageGet(key) {
+  try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+function storageSet(key, value) {
+  try { localStorage.setItem(key, value); } catch (e) { /* 저장 못 해도 화면은 동작 */ }
 }
 
-// 줄바꿈이나 쉼표로 나눠 목록으로 만든다
-function splitLines(text, alsoComma) {
-  const pattern = alsoComma ? /[\n,]/ : /\n/;
-  return (text || '').split(pattern).map((s) => s.trim()).filter(Boolean);
+function lines(text) {
+  return (text || '').split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
 }
 
-function fillList(listId, items) {
-  const list = $(listId);
-  list.textContent = '';
-  items.forEach((item) => list.append(el('li', '', item)));
-  list.closest('.fact').hidden = items.length === 0;
+function formatDate(iso) {
+  var d = new Date(iso);
+  if (isNaN(d)) { return ''; }
+  var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+  return d.getFullYear() + '.' + pad(d.getMonth() + 1) + '.' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
 }
 
-function formatDate(value) {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-
-// ---------------------------------------------------------
-// 이 브라우저의 좋아요용 번호(client_id)
-// ---------------------------------------------------------
+// 이 브라우저를 구분하는 값 (좋아요 한 번만 누르기용)
 function getClientId() {
-  let id = readStorage(CLIENT_ID_KEY);
-  if (!id || id.length < 8 || id.length > 64) {
+  var id = storageGet('resume_client_id');
+  if (!id) {
     id = (window.crypto && crypto.randomUUID)
       ? crypto.randomUUID()
-      : `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
-    writeStorage(CLIENT_ID_KEY, id);
+      : 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+    storageSet('resume_client_id', id);
   }
   return id;
 }
 
-function loadLikedFromStorage() {
-  try {
-    const saved = JSON.parse(readStorage(LIKED_KEY) || '[]');
-    if (Array.isArray(saved)) saved.forEach((id) => state.liked.add(Number(id)));
-  } catch { /* 망가진 값이면 무시 */ }
+function getLikedIds() {
+  try { return JSON.parse(storageGet('resume_liked') || '[]'); } catch (e) { return []; }
+}
+function rememberLiked(projectId) {
+  var list = getLikedIds();
+  if (list.indexOf(projectId) === -1) { list.push(projectId); }
+  storageSet('resume_liked', JSON.stringify(list));
 }
 
-function saveLiked() {
-  writeStorage(LIKED_KEY, JSON.stringify([...state.liked]));
-}
-
-
-// ---------------------------------------------------------
-// 1. 프로필
-// ---------------------------------------------------------
-async function loadProfile() {
-  try {
-    const rows = await api('profile?select=*&id=eq.1');
-    const profile = rows && rows[0];
-    if (!profile) {
-      $('name').textContent = '프로필이 아직 없습니다';
-      return;
-    }
-    renderProfile(profile);
-  } catch (error) {
-    console.error(error);
-    $('name').textContent = '프로필을 불러오지 못했습니다';
-  }
-}
-
+// ---------- 프로필 ----------
 function renderProfile(p) {
-  if (p.name) document.title = `${p.name} 포트폴리오`;
-
-  // 사진: 있으면 보여 주고, 없으면 회색 자리
-  const photoUrl = safeUrl(p.photo_url);
-  const img = $('photo-img');
-  if (photoUrl) {
-    img.src = photoUrl;
-    img.hidden = false;
-    $('photo-empty').hidden = true;
-    img.onerror = () => { img.hidden = true; $('photo-empty').hidden = false; };
+  var photo = document.getElementById('photo');
+  photo.textContent = '';
+  if (isWebUrl(p.photo_url)) {
+    var img = document.createElement('img');
+    img.src = p.photo_url;
+    img.alt = p.name + ' 프로필 사진';
+    photo.appendChild(img);
   }
 
-  $('name').textContent = p.name;
-  $('job').textContent = p.title;
-  $('badge-text').textContent = p.career_badge;
-  $('badge').hidden = !p.career_badge;
+  document.getElementById('name').textContent = p.name;
+  document.getElementById('title').textContent = p.title;
+  document.getElementById('badge').textContent = p.career_badge;
+  document.getElementById('badge').parentNode.hidden = !p.career_badge;
+  document.title = p.name ? p.name + ' 포트폴리오' : '포트폴리오';
 
-  $('c-name').textContent = p.name;
-  $('c-email').textContent = p.email;
-  $('c-phone').textContent = p.phone;
-  $('c-location').textContent = p.location;
-
-  renderHeadline(p.headline, p.name);
-  $('intro').textContent = p.intro;
-
-  fillList('education', splitLines(p.education));
-  fillList('skills', splitLines(p.skills, true));
-  fillList('experience', splitLines(p.experience));
-
-  $('quote').textContent = p.quote;
-  $('quote').hidden = !p.quote;
-}
-
-// 한 줄 소개: 첫 쉼표 뒤에서 줄을 바꾸고, 그 줄의 이름까지 파란 글씨 + 밑줄
-function renderHeadline(headline, name) {
-  const node = $('headline');
-  node.textContent = '';
-  if (!headline) return;
-
-  const comma = headline.indexOf(',');
-  const first = comma >= 0 ? headline.slice(0, comma + 1) : '';
-  const second = comma >= 0 ? headline.slice(comma + 1).trim() : headline;
-  if (first) node.append(first, document.createElement('br'));
-
-  const at = name ? second.indexOf(name) : -1;
-  if (at >= 0) {
-    const end = at + name.length;
-    node.append(el('span', 'accent', second.slice(0, end)), second.slice(end));
-  } else {
-    node.append(second);
-  }
-}
-
-
-// ---------------------------------------------------------
-// 2. 포트폴리오 카드 + 좋아요
-// ---------------------------------------------------------
-async function loadProjects() {
-  const box = $('cards');
-  let projects;
-  try {
-    projects = await api('projects?select=*&order=sort_order.asc,id.asc');
-  } catch (error) {
-    console.error(error);
-    box.textContent = '';
-    box.append(el('p', 'empty', '프로젝트를 불러오지 못했습니다. 잠시 후 새로고침해 주세요.'));
-    return;
-  }
-
-  // 좋아요 수와 "내가 누른 카드"는 실패해도 카드는 보여 준다
-  try {
-    const [allLikes, myLikes] = await Promise.all([
-      api('likes?select=project_id'),
-      api(`likes?select=project_id&client_id=eq.${encodeURIComponent(state.clientId)}`),
-    ]);
-    allLikes.forEach((row) => {
-      state.counts[row.project_id] = (state.counts[row.project_id] || 0) + 1;
-    });
-    myLikes.forEach((row) => state.liked.add(row.project_id));
-    saveLiked();
-  } catch (error) {
-    console.error(error);
-  }
-
-  box.textContent = '';
-  if (!projects.length) {
-    box.append(el('p', 'empty', '아직 등록된 프로젝트가 없습니다.'));
-    return;
-  }
-  projects.forEach((project) => box.append(makeCard(project)));
-}
-
-function makeCard(project) {
-  const card = el('article', 'card');
-
-  // 누르는 부분: 썸네일 + 글
-  const open = el('button', 'card-open');
-  open.type = 'button';
-  const target = safeUrl(project.file_url) || safeUrl(project.thumbnail_url);
-  if (target) {
-    open.setAttribute('aria-label', `${project.title} 자료를 새 탭에서 열기`);
-    open.addEventListener('click', () => window.open(target, '_blank', 'noopener'));
-  } else {
-    open.disabled = true;
-  }
-
-  // 점 세 개가 있는 브라우저 창 모양 썸네일
-  const browser = el('div', 'browser');
-  const bar = el('div', 'browser-bar');
-  bar.append(el('i'), el('i'), el('i'));
-  const view = el('div', 'browser-view');
-  const thumb = safeUrl(project.thumbnail_url);
-  if (thumb) {
-    const img = el('img');
-    img.src = thumb;
-    img.alt = '';
-    img.loading = 'lazy';
-    img.onerror = () => img.remove();
-    view.append(img);
-  }
-  browser.append(bar, view);
-
-  const body = el('div', 'card-body');
-  const kicker = [project.number && `${project.number}.`, project.category].filter(Boolean).join(' ');
-  if (kicker) body.append(el('p', 'card-kicker', kicker));
-  body.append(el('h4', 'card-title', project.title));
-  body.append(el('p', 'card-desc', project.description));
-
-  open.append(browser, body);
-
-  // 아래쪽: 회색 태그 + 하트
-  const foot = el('div', 'card-foot');
-  const tags = el('div', 'tags');
-  (project.tags || []).forEach((text) => {
-    const tag = el('span', 'tag', text);
-    tag.title = text; // 글자가 잘리면 마우스를 올려 전체를 본다
-    tags.append(tag);
+  var contacts = document.getElementById('contacts');
+  contacts.textContent = '';
+  [
+    ['person', '이름', p.name],
+    ['mail', '이메일', p.email],
+    ['phone', '연락처', p.phone],
+    ['pin', '위치', p.location]
+  ].forEach(function (row) {
+    if (!row[2]) { return; }
+    var li = el('li');
+    var icon = el('span', 'contact-icon');
+    icon.appendChild(svgIcon(ICONS[row[0]]));
+    var box = el('span');
+    box.appendChild(el('span', 'contact-label', row[1]));
+    box.appendChild(el('span', 'contact-value', row[2]));
+    li.appendChild(icon);
+    li.appendChild(box);
+    contacts.appendChild(li);
   });
-  foot.append(tags, makeLikeButton(project));
 
-  card.append(open, foot);
+  renderHeadline(p.headline || '', p.name || '');
+  document.getElementById('intro').textContent = p.intro || '';
+  renderInfo('education', p.education);
+  renderSkills(p.skills);
+  renderInfo('experience', p.experience);
+  document.getElementById('quote').textContent = p.quote ? '“' + p.quote + '”' : '';
+}
+
+// 한 줄 소개: 마지막 쉼표 뒤부터 이름까지를 파란 밑줄로 보여 준다
+function renderHeadline(text, name) {
+  var box = document.getElementById('headline');
+  box.textContent = '';
+  var nameAt = name ? text.indexOf(name) : -1;
+  if (nameAt === -1) { box.textContent = text; return; }
+
+  var end = nameAt + name.length;
+  var comma = Math.max(text.lastIndexOf(',', nameAt), text.lastIndexOf('，', nameAt));
+  var start = comma === -1 ? 0 : comma + 1;
+
+  if (comma !== -1) {
+    box.appendChild(document.createTextNode(text.slice(0, comma + 1)));
+    box.appendChild(document.createElement('br'));
+  } else if (start > 0) {
+    box.appendChild(document.createTextNode(text.slice(0, start)));
+  }
+  box.appendChild(el('span', 'em', text.slice(start, end).trim()));
+  box.appendChild(document.createTextNode(text.slice(end)));
+}
+
+function renderInfo(id, text) {
+  var box = document.getElementById(id);
+  box.textContent = '';
+  lines(text).forEach(function (line, i) {
+    box.appendChild(el('p', i === 0 ? 'first' : '', line));
+  });
+}
+
+function renderSkills(text) {
+  var box = document.getElementById('skills');
+  box.textContent = '';
+  var items = (text || '').split(/[,\n]/).map(function (s) { return s.trim(); }).filter(Boolean);
+  var ul = el('ul', 'skill-list');
+  items.forEach(function (item) { ul.appendChild(el('li', '', item)); });
+  box.appendChild(ul);
+}
+
+// ---------- 포트폴리오 카드 ----------
+function renderProjects(projects, likeCounts) {
+  var grid = document.getElementById('projects');
+  grid.textContent = '';
+  if (!projects.length) {
+    grid.appendChild(el('p', 'status', '아직 등록된 포트폴리오가 없어요.'));
+    return;
+  }
+  var liked = getLikedIds();
+  projects.forEach(function (project) {
+    grid.appendChild(buildCard(project, likeCounts[project.id] || 0, liked.indexOf(project.id) !== -1));
+  });
+}
+
+function buildCard(project, count, alreadyLiked) {
+  var link = isWebUrl(project.file_url) ? project.file_url : (isWebUrl(project.thumbnail_url) ? project.thumbnail_url : null);
+
+  var card = el('article', 'project' + (link ? ' clickable' : ''));
+  if (link) {
+    card.tabIndex = 0;
+    card.setAttribute('role', 'link');
+    card.setAttribute('aria-label', project.title + ' 상세 보기');
+    var open = function () { window.open(link, '_blank', 'noopener'); };
+    card.addEventListener('click', open);
+    card.addEventListener('keydown', function (e) {
+      if (e.target === card && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(); }
+    });
+  }
+
+  var thumb = el('div', 'thumb');
+  var bar = el('div', 'thumb-bar');
+  bar.appendChild(el('i'));
+  bar.appendChild(el('i'));
+  bar.appendChild(el('i'));
+  var imgBox = el('div', 'thumb-img');
+  if (isWebUrl(project.thumbnail_url)) {
+    var img = document.createElement('img');
+    img.src = project.thumbnail_url;
+    img.alt = project.title + ' 썸네일';
+    img.loading = 'lazy';
+    imgBox.appendChild(img);
+  }
+  thumb.appendChild(bar);
+  thumb.appendChild(imgBox);
+  card.appendChild(thumb);
+
+  var cat = (project.number ? project.number + '. ' : '') + (project.category || '');
+  card.appendChild(el('p', 'p-cat', cat));
+  card.appendChild(el('h4', 'p-title', project.title));
+  card.appendChild(el('p', 'p-desc', project.description));
+
+  var foot = el('div', 'p-foot');
+  var tags = el('div', 'tags');
+  (project.tags || []).forEach(function (t) { tags.appendChild(el('span', 'tag', t)); });
+  foot.appendChild(tags);
+  foot.appendChild(buildLikeButton(project.id, count, alreadyLiked));
+  card.appendChild(foot);
+
   return card;
 }
 
-function makeLikeButton(project) {
-  const button = el('button', 'like');
-  button.type = 'button';
-  button.innerHTML = HEART_SVG;
-  const count = el('span', 'like-count');
-  button.append(count);
+function buildLikeButton(projectId, count, alreadyLiked) {
+  var btn = el('button', 'like-btn');
+  btn.type = 'button';
+  btn.setAttribute('aria-label', '좋아요');
+  btn.appendChild(svgIcon('M12 21s-8-5.3-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.700-8 11-8 11z'));
+  var num = el('span', '', String(count));
+  btn.appendChild(num);
 
-  const update = () => {
-    const liked = state.liked.has(project.id);
-    count.textContent = state.counts[project.id] || 0;
-    button.classList.toggle('is-liked', liked);
-    button.setAttribute('aria-pressed', liked ? 'true' : 'false');
-    button.setAttribute('aria-label', liked ? `좋아요 ${count.textContent}개 (이미 눌렀어요)` : `좋아요 ${count.textContent}개, 누르면 좋아요`);
-  };
-  update();
+  function markLiked() {
+    btn.classList.add('liked');
+    btn.disabled = true;
+    rememberLiked(projectId);
+  }
+  if (alreadyLiked) { markLiked(); }
 
-  button.addEventListener('click', async () => {
-    if (state.liked.has(project.id) || button.disabled) return;
-    button.disabled = true;
-    try {
-      await api('likes', {
-        method: 'POST',
-        headers: { Prefer: 'return=minimal' },
-        body: { project_id: project.id, client_id: state.clientId },
-      });
-      state.counts[project.id] = (state.counts[project.id] || 0) + 1;
-      state.liked.add(project.id);
-    } catch (error) {
-      if (error.status === 409) {
-        // 이미 이 브라우저로 누른 카드 (숫자에는 이미 들어 있다)
-        state.liked.add(project.id);
+  btn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (btn.disabled) { return; }
+    btn.disabled = true;
+    api('likes', {
+      method: 'POST',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ project_id: projectId, client_id: getClientId() })
+    }).then(function (res) {
+      if (res.ok) {
+        num.textContent = String(Number(num.textContent) + 1);
+        markLiked();
+      } else if (res.status === 409) {
+        markLiked();   // 이미 눌렀던 카드
       } else {
-        console.error(error);
-        showToast('좋아요를 남기지 못했습니다. 잠시 후 다시 눌러 주세요.');
+        btn.disabled = false;
       }
-    }
-    saveLiked();
-    button.disabled = false;
-    update();
+    }).catch(function () { btn.disabled = false; });
   });
 
-  return button;
+  return btn;
 }
 
+// ---------- 방명록 ----------
+function buildGuestItem(entry) {
+  var li = el('li', 'guest-item');
+  var top = el('div', 'guest-top');
+  top.appendChild(el('span', 'guest-nick', entry.nickname));
+  top.appendChild(el('span', 'guest-date', formatDate(entry.created_at)));
+  li.appendChild(top);
+  li.appendChild(el('p', 'guest-text', entry.message));
+  return li;
+}
 
-// ---------------------------------------------------------
-// 3. 방명록
-// ---------------------------------------------------------
-async function loadGuestbook() {
-  const list = $('gb-list');
-  try {
-    const rows = await api('resume_guestbook?select=id,nickname,message,created_at&order=created_at.desc,id.desc');
-    list.textContent = '';
-    if (!rows.length) {
-      list.append(el('li', 'empty', '아직 남겨진 글이 없습니다. 첫 글을 남겨 주세요!'));
+function renderGuestbook(entries) {
+  var list = document.getElementById('gb-list');
+  list.textContent = '';
+  if (!entries.length) {
+    list.appendChild(el('li', 'guest-empty', '아직 남겨진 글이 없어요. 첫 글을 남겨 주세요!'));
+    return;
+  }
+  entries.forEach(function (entry) { list.appendChild(buildGuestItem(entry)); });
+}
+
+function setupGuestForm() {
+  var nick = document.getElementById('gb-nickname');
+  var msg = document.getElementById('gb-message');
+  var btn = document.getElementById('gb-submit');
+  var note = document.getElementById('gb-msg');
+
+  btn.addEventListener('click', function () {
+    var nickname = nick.value.trim();
+    var message = msg.value.trim();
+    note.textContent = '';
+    if (!nickname || !message) {
+      note.textContent = '별명과 한마디를 모두 적어 주세요.';
       return;
     }
-    rows.forEach((row) => list.append(makeGuestbookItem(row)));
-  } catch (error) {
-    console.error(error);
-    list.textContent = '';
-    list.append(el('li', 'empty', '방명록을 불러오지 못했습니다. 잠시 후 새로고침해 주세요.'));
-  }
-}
-
-function makeGuestbookItem(row) {
-  const item = el('li', 'gb-item');
-  const meta = el('div', 'gb-meta');
-  meta.append(el('span', 'gb-nick', row.nickname), el('span', 'gb-date', formatDate(row.created_at)));
-  item.append(meta, el('p', 'gb-text', row.message));
-  return item;
-}
-
-function setGuestbookStatus(message, isError) {
-  const status = $('gb-status');
-  status.textContent = message;
-  status.classList.toggle('is-error', Boolean(isError));
-}
-
-async function submitGuestbook() {
-  const nickname = $('gb-nick').value.trim();
-  const message = $('gb-msg').value.trim();
-
-  if (!nickname || charLength(nickname) > 20) {
-    setGuestbookStatus('별명을 1~20자로 적어 주세요.', true);
-    $('gb-nick').focus();
-    return;
-  }
-  if (!message || charLength(message) > 200) {
-    setGuestbookStatus('한마디를 1~200자로 적어 주세요.', true);
-    $('gb-msg').focus();
-    return;
-  }
-
-  const button = $('gb-submit');
-  button.disabled = true;
-  setGuestbookStatus('남기는 중…');
-  try {
-    const rows = await api('resume_guestbook?select=id,nickname,message,created_at', {
+    btn.disabled = true;
+    api('resume_guestbook', {
       method: 'POST',
       headers: { Prefer: 'return=representation' },
-      body: { nickname, message },
+      body: JSON.stringify({ nickname: nickname, message: message })
+    }).then(function (res) {
+      if (!res.ok) { throw new Error('저장 실패'); }
+      return res.json();
+    }).then(function (rows) {
+      var list = document.getElementById('gb-list');
+      var empty = list.querySelector('.guest-empty');
+      if (empty) { list.removeChild(empty); }
+      list.insertBefore(buildGuestItem(rows[0]), list.firstChild);
+      msg.value = '';
+    }).catch(function () {
+      note.textContent = '글을 남기지 못했어요. 잠시 뒤에 다시 해 주세요.';
+    }).then(function () { btn.disabled = false; });
+  });
+}
+
+// ---------- 시작 ----------
+function start() {
+  setupGuestForm();
+
+  Promise.all([
+    getJson('profile?select=*&id=eq.1'),
+    getJson('projects?select=*&order=sort_order.asc,id.asc'),
+    getJson('likes?select=project_id'),
+    getJson('resume_guestbook?select=*&order=created_at.desc&limit=50')
+  ]).then(function (data) {
+    var likeCounts = {};
+    data[2].forEach(function (row) {
+      likeCounts[row.project_id] = (likeCounts[row.project_id] || 0) + 1;
     });
-    const list = $('gb-list');
-    list.querySelectorAll('.empty').forEach((node) => node.remove());
-    list.prepend(makeGuestbookItem(rows[0]));
-    $('gb-msg').value = '';
-    updateCount();
-    setGuestbookStatus('');
-    showToast('방명록을 남겼습니다. 고맙습니다!');
-  } catch (error) {
-    console.error(error);
-    setGuestbookStatus('남기지 못했습니다. 잠시 후 다시 시도해 주세요.', true);
-  } finally {
-    button.disabled = false;
-  }
+    if (data[0][0]) { renderProfile(data[0][0]); }
+    renderProjects(data[1], likeCounts);
+    renderGuestbook(data[3]);
+  }).catch(function () {
+    var grid = document.getElementById('projects');
+    grid.textContent = '';
+    grid.appendChild(el('p', 'status', '내용을 불러오지 못했어요. 새로고침해 주세요.'));
+  });
 }
 
-function updateCount() {
-  $('gb-count').textContent = `${charLength($('gb-msg').value)} / 200`;
-}
-
-
-// ---------------------------------------------------------
-// 시작
-// ---------------------------------------------------------
-state.clientId = getClientId();
-loadLikedFromStorage();
-
-$('gb-submit').addEventListener('click', submitGuestbook);
-$('gb-msg').addEventListener('input', updateCount);
-
-loadProfile();
-loadProjects();
-loadGuestbook();
+start();

@@ -1,119 +1,76 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>포트폴리오</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main class="page">
+  <div class="page">
 
-    <!-- 흰 큰 카드: 왼쪽 ABOUT ME + 오른쪽 PORTFOLIO -->
-    <section class="sheet resume">
-
-      <!-- 왼쪽: ABOUT ME -->
-      <aside class="about">
-        <p class="eyebrow">ABOUT ME</p>
-
-        <div class="photo" id="photo">
-          <img id="photo-img" alt="프로필 사진" hidden>
-          <svg class="photo-empty" id="photo-empty" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z"/></svg>
-        </div>
-
-        <h2 class="name" id="name">불러오는 중…</h2>
-        <p class="job" id="job"></p>
-        <p class="badge" id="badge" hidden>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          <span id="badge-text"></span>
-        </p>
-
-        <ul class="contacts">
-          <li>
-            <span class="contact-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z"/></svg></span>
-            <div><span class="contact-label">이름</span><span class="contact-value" id="c-name"></span></div>
-          </li>
-          <li>
-            <span class="contact-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v12H3z"/><path d="M3 6l9 7 9-7" fill="none" stroke="#1f2430" stroke-width="2"/></svg></span>
-            <div><span class="contact-label">이메일</span><span class="contact-value" id="c-email"></span></div>
-          </li>
-          <li>
-            <span class="contact-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z"/></svg></span>
-            <div><span class="contact-label">연락처</span><span class="contact-value" id="c-phone"></span></div>
-          </li>
-          <li>
-            <span class="contact-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg></span>
-            <div><span class="contact-label">위치</span><span class="contact-value" id="c-location"></span></div>
-          </li>
-        </ul>
+    <section class="card main-card">
+      <aside class="about" id="about">
+        <p class="about-label">ABOUT ME</p>
+        <div class="photo" id="photo"></div>
+        <h2 class="name" id="name"></h2>
+        <p class="title" id="title"></p>
+        <p class="badge-wrap"><span class="badge" id="badge"></span></p>
+        <ul class="contacts" id="contacts"></ul>
       </aside>
 
-      <!-- 오른쪽: PORTFOLIO -->
-      <div class="content">
-        <h1 class="page-title">PORTFOLIO</h1>
+      <main class="portfolio">
+        <h1 class="page-title"><span class="bar"></span>PORTFOLIO</h1>
         <p class="headline" id="headline"></p>
         <p class="intro" id="intro"></p>
+        <hr class="divider">
 
-        <div class="facts">
-          <section class="fact">
-            <h3><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 1 9l11 6 9-4.9V17h2V9z"/><path d="M5 13.2V17l7 4 7-4v-3.8l-7 3.8z"/></svg>EDUCATION</h3>
-            <ul id="education"></ul>
+        <div class="info-grid">
+          <section>
+            <h3 class="info-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 1 9l11 6 9-4.9V17h2V9L12 3zm-6 9.2v4L12 20l6-3.8v-4L12 15.5 6 12.2z"/></svg>EDUCATION</h3>
+            <div class="info-body" id="education"></div>
           </section>
-          <section class="fact">
-            <h3><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 3 6.6 7 .8-5.2 4.8 1.4 7L12 17.7 5.8 21.2l1.4-7L2 9.4l7-.8z"/></svg>SKILLS &amp; TOOLS</h3>
-            <ul id="skills" class="skills"></ul>
+          <section>
+            <h3 class="info-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.7 5.8 21l1.2-6.8-5-4.9 6.9-1L12 2z"/></svg>SKILLS &amp; TOOLS</h3>
+            <div class="info-body" id="skills"></div>
           </section>
-          <section class="fact">
-            <h3><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6a2 2 0 0 1 2 2v2h4a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a1 1 0 0 1 1-1h4V5a2 2 0 0 1 2-2zm0 4h6V5H9z"/></svg>EXPERIENCE</h3>
-            <ul id="experience"></ul>
+          <section>
+            <h3 class="info-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3h4a2 2 0 0 1 2 2v1h4a2 2 0 0 1 2 2v4H2V8a2 2 0 0 1 2-2h4V5a2 2 0 0 1 2-2zm0 2v1h4V5h-4zM2 14h8v2h4v-2h8v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5z"/></svg>EXPERIENCE</h3>
+            <div class="info-body" id="experience"></div>
           </section>
         </div>
 
         <section class="highlights">
           <div class="highlights-head">
             <h3>PORTFOLIO HIGHLIGHTS</h3>
-            <p>카드를 누르면 자료가 새 탭에서 열립니다</p>
+            <span class="hint">(카드를 터치하면 상세 기획서를 보실 수 있습니다)</span>
           </div>
-          <div class="cards" id="cards">
-            <p class="empty">불러오는 중…</p>
-          </div>
+          <div class="project-grid" id="projects"><p class="status">불러오는 중…</p></div>
         </section>
 
-        <blockquote class="quote" id="quote" hidden></blockquote>
-      </div>
+        <p class="quote" id="quote"></p>
+      </main>
     </section>
 
-    <!-- 방명록 -->
-    <section class="sheet guestbook">
-      <h2 class="page-title">GUESTBOOK</h2>
-      <p class="intro">다녀가신 흔적을 한마디 남겨 주세요.</p>
+    <section class="card guestbook">
+      <div class="guestbook-inner">
+        <h2 class="guestbook-title"><span class="bar"></span>GUESTBOOK</h2>
+        <p class="guestbook-sub">방문해 주셔서 감사합니다. 별명과 한마디를 남겨 주세요.</p>
 
-      <div class="gb-form">
-        <label class="gb-field gb-nick">
-          <span>별명</span>
-          <input id="gb-nick" type="text" maxlength="20" placeholder="최대 20자" autocomplete="nickname">
-        </label>
-        <label class="gb-field gb-msg">
-          <span>한마디</span>
-          <textarea id="gb-msg" maxlength="200" rows="3" placeholder="최대 200자"></textarea>
-        </label>
-        <div class="gb-actions">
-          <span class="gb-count" id="gb-count">0 / 200</span>
-          <button type="button" class="btn-primary" id="gb-submit">남기기</button>
+        <div class="guest-form">
+          <input type="text" id="gb-nickname" maxlength="20" placeholder="별명 (20자까지)" aria-label="별명">
+          <input type="text" id="gb-message" maxlength="200" placeholder="한마디 (200자까지)" aria-label="한마디">
+          <button type="button" id="gb-submit" class="primary-btn">남기기</button>
         </div>
-        <p class="gb-status" id="gb-status" role="status"></p>
-      </div>
+        <p class="form-msg" id="gb-msg" role="status"></p>
 
-      <ul class="gb-list" id="gb-list">
-        <li class="empty">불러오는 중…</li>
-      </ul>
+        <ul class="guest-list" id="gb-list"></ul>
+      </div>
     </section>
 
-  </main>
+    <p class="admin-link"><a href="admin.html">관리자</a></p>
 
-  <!-- 잠깐 떴다 사라지는 알림 -->
-  <p class="toast" id="toast" role="status" hidden></p>
-
+  </div>
   <script src="script.js"></script>
 </body>
 </html>
