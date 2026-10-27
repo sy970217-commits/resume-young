@@ -445,3 +445,15 @@ button { font-family: inherit; cursor: pointer; }
   .row { flex-direction: column; align-items: stretch; }
   .row-actions { justify-content: flex-start; }
 }
+
+/* ---------- 잠깐 쓰는 지우기 시험 ---------- */
+.delete-test { margin-top: 10px; }
+.delete-test-result {
+  margin: 8px 0 0;
+  font-family: inherit;
+  font-size: 12px;
+  color: #374151;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.delete-test-result:empty { display: none; }
