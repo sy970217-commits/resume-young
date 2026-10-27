@@ -55,9 +55,17 @@
     <section class="card guestbook">
       <div class="guestbook-inner">
         <h2 class="guestbook-title"><span class="bar"></span>GUESTBOOK</h2>
-        <p class="guestbook-sub">방문해 주셔서 감사합니다. 별명과 한마디를 남겨 주세요.</p>
+        <p class="guestbook-sub">방문해 주셔서 감사합니다. 구글로 로그인하고 별명과 한마디를 남겨 주세요.</p>
 
-        <div class="guest-form">
+        <!-- 구글 로그인: 로그인하면 내 구글 이름과 로그아웃 버튼이 보인다 -->
+        <div class="gb-auth">
+          <p class="gb-auth-text" id="gb-auth-text">글을 남기려면 구글로 로그인해 주세요.</p>
+          <button type="button" id="google-login" class="ghost-btn">구글로 로그인</button>
+          <button type="button" id="google-logout" class="ghost-btn small" hidden>로그아웃</button>
+        </div>
+        <p class="form-msg" id="gb-auth-msg" role="status"></p>
+
+        <div class="guest-form" id="gb-form" hidden>
           <input type="text" id="gb-nickname" maxlength="20" placeholder="별명 (20자까지)" aria-label="별명">
           <input type="text" id="gb-message" maxlength="200" placeholder="한마디 (200자까지)" aria-label="한마디">
           <button type="button" id="gb-submit" class="primary-btn">남기기</button>

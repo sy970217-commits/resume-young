@@ -13,6 +13,7 @@ var ICONS = {
 function api(path, options) {
   options = options || {};
   var headers = { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' };
+  if (options.token) { headers.Authorization = 'Bearer ' + options.token; } // 로그인한 사람으로 요청
   for (var k in options.headers) { headers[k] = options.headers[k]; }
   return fetch(SUPABASE_URL + '/rest/v1/' + path, {
     method: options.method || 'GET',
@@ -279,10 +280,20 @@ function buildGuestItem(entry) {
   top.appendChild(el('span', 'guest-date', formatDate(entry.created_at)));
   li.appendChild(top);
   li.appendChild(el('p', 'guest-text', entry.message));
+
+  // 내가 쓴 글에만 지우기 버튼 (실제로 막는 것은 Supabase 규칙이다)
+  if (visitor && entry.user_id && entry.user_id === visitor.user.id) {
+    var del = el('button', 'danger-btn small', '지우기');
+    del.type = 'button';
+    del.addEventListener('click', function () { deleteMyEntry(entry, del); });
+    li.appendChild(del);
+  }
   return li;
 }
 
 function renderGuestbook(entries) {
+  guestEntries = entries;
+  guestLoaded = true;
   var list = document.getElementById('gb-list');
   list.textContent = '';
   if (!entries.length) {
@@ -306,24 +317,205 @@ function setupGuestForm() {
       note.textContent = '별명과 한마디를 모두 적어 주세요.';
       return;
     }
+    if (!visitor) {
+      note.textContent = '글을 남기려면 먼저 구글로 로그인해 주세요.';
+      return;
+    }
     btn.disabled = true;
-    api('resume_guestbook', {
-      method: 'POST',
-      headers: { Prefer: 'return=representation' },
-      body: JSON.stringify({ nickname: nickname, message: message })
+    getVisitorToken().then(function (token) {
+      return api('resume_guestbook', {
+        method: 'POST',
+        token: token,
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({ nickname: nickname, message: message }) // 글쓴이(user_id)는 Supabase가 채운다
+      });
     }).then(function (res) {
+      if (res.status === 401) { throw new Error('auth'); }
       if (!res.ok) { throw new Error('저장 실패'); }
       return res.json();
     }).then(function (rows) {
-      var list = document.getElementById('gb-list');
-      var empty = list.querySelector('.guest-empty');
-      if (empty) { list.removeChild(empty); }
-      list.insertBefore(buildGuestItem(rows[0]), list.firstChild);
+      renderGuestbook([rows[0]].concat(guestEntries));
       msg.value = '';
-    }).catch(function () {
-      note.textContent = '글을 남기지 못했어요. 잠시 뒤에 다시 해 주세요.';
+    }).catch(function (err) {
+      if (err.message === 'auth') {
+        signOutHere('로그인이 끝났어요. 다시 로그인해 주세요.');
+      } else {
+        note.textContent = '글을 남기지 못했어요. 잠시 뒤에 다시 해 주세요.';
+      }
     }).then(function () { btn.disabled = false; });
   });
+}
+
+function deleteMyEntry(entry, del) {
+  if (!window.confirm('이 글을 지울까요?\n"' + entry.message.slice(0, 40) + '"\n되돌릴 수 없어요.')) { return; }
+  var note = document.getElementById('gb-msg');
+  note.textContent = '';
+  del.disabled = true;
+  getVisitorToken().then(function (token) {
+    return api('resume_guestbook?id=eq.' + entry.id, {
+      method: 'DELETE',
+      token: token,
+      headers: { Prefer: 'return=representation' }
+    });
+  }).then(function (res) {
+    if (!res.ok) { throw new Error('지우기 실패'); }
+    return res.json();
+  }).then(function (rows) {
+    // 규칙에 막히면 오류 없이 0줄이 돌아온다
+    if (!rows.length) { throw new Error('0줄'); }
+    renderGuestbook(guestEntries.filter(function (e) { return e.id !== entry.id; }));
+  }).catch(function () {
+    note.textContent = '글을 지우지 못했어요. 내 글이 맞는지, 로그인이 되어 있는지 확인해 주세요.';
+    del.disabled = false;
+  });
+}
+
+// ---------- 구글 로그인 (Supabase Auth를 fetch로 직접 부른다) ----------
+var VISITOR_KEY = 'resume_visitor_session';
+var visitor = null;        // 로그인한 방문자 { access_token, refresh_token, expires_at(ms), user: { id, name } }
+var refreshingVisitor = null;
+var guestEntries = [];     // 화면에 보이는 방명록 글
+var guestLoaded = false;
+
+function authFetch(path, options) {
+  options = options || {};
+  var headers = { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' };
+  if (options.token) { headers.Authorization = 'Bearer ' + options.token; }
+  return fetch(SUPABASE_URL + '/auth/v1/' + path, {
+    method: options.method || 'GET',
+    headers: headers,
+    body: options.body
+  });
+}
+
+function saveVisitor(v) {
+  visitor = v;
+  if (v) { storageSet(VISITOR_KEY, JSON.stringify(v)); }
+  else { try { localStorage.removeItem(VISITOR_KEY); } catch (e) { /* 무시 */ } }
+}
+
+function googleName(user) {
+  var meta = user.user_metadata || {};
+  return meta.full_name || meta.name || user.email || '방문자';
+}
+
+function fetchUser(token) {
+  return authFetch('user', { token: token }).then(function (res) {
+    if (!res.ok) { throw new Error('auth'); }
+    return res.json();
+  }).then(function (user) {
+    return { id: user.id, name: googleName(user) };
+  });
+}
+
+// 구글 로그인 화면으로 갔다가 이 페이지로 돌아온다
+function googleLogin() {
+  var back = location.origin + location.pathname;
+  location.href = SUPABASE_URL + '/auth/v1/authorize?provider=google&redirect_to=' + encodeURIComponent(back);
+}
+
+// 구글에서 돌아오면 주소 뒤(#)에 로그인 정보가 붙어 온다. 읽고 나서 주소창에서 지운다.
+function readLoginFromUrl() {
+  var hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+  var query = new URLSearchParams(location.search);
+  var error = hash.get('error_description') || query.get('error_description');
+  var token = hash.get('access_token');
+  if (!token && !error) { return null; }
+  history.replaceState(null, '', location.pathname);
+  if (error) { return { error: error.replace(/\+/g, ' ') }; }
+  var expiresIn = Number(hash.get('expires_in')) || 3600;
+  return {
+    access_token: token,
+    refresh_token: hash.get('refresh_token'),
+    expires_at: Date.now() + expiresIn * 1000
+  };
+}
+
+// 요청에 쓸 토큰. 곧 끝나면 새로 받아 온다.
+function getVisitorToken() {
+  if (!visitor) { return Promise.reject(new Error('auth')); }
+  if (visitor.expires_at - Date.now() > 60000) { return Promise.resolve(visitor.access_token); }
+  if (!refreshingVisitor) {
+    refreshingVisitor = authFetch('token?grant_type=refresh_token', {
+      method: 'POST',
+      body: JSON.stringify({ refresh_token: visitor.refresh_token })
+    }).then(function (res) {
+      if (!res.ok) { throw new Error('auth'); }
+      return res.json();
+    }).then(function (data) {
+      saveVisitor({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expires_at: Date.now() + (data.expires_in || 3600) * 1000,
+        user: visitor.user
+      });
+      return data.access_token;
+    }).then(function (token) {
+      refreshingVisitor = null;
+      return token;
+    }, function (err) {
+      refreshingVisitor = null;
+      throw err;
+    });
+  }
+  return refreshingVisitor;
+}
+
+function googleLogout() {
+  var token = visitor && visitor.access_token;
+  signOutHere('로그아웃했어요.');
+  if (token) {
+    authFetch('logout?scope=local', { method: 'POST', token: token }).catch(function () { /* 화면에서는 이미 나갔다 */ });
+  }
+}
+
+function signOutHere(message) {
+  saveVisitor(null);
+  document.getElementById('gb-auth-msg').textContent = message || '';
+  updateAuthUI();
+}
+
+function updateAuthUI() {
+  var text = document.getElementById('gb-auth-text');
+  var nick = document.getElementById('gb-nickname');
+  text.textContent = '';
+  if (visitor) {
+    text.appendChild(el('strong', '', visitor.user.name));
+    text.appendChild(document.createTextNode(' 님으로 로그인했어요.'));
+    if (!nick.value) { nick.value = visitor.user.name.slice(0, 20); }
+  } else {
+    text.textContent = '글을 남기려면 구글로 로그인해 주세요.';
+  }
+  document.getElementById('google-login').hidden = !!visitor;
+  document.getElementById('google-logout').hidden = !visitor;
+  document.getElementById('gb-form').hidden = !visitor;
+  if (guestLoaded) { renderGuestbook(guestEntries); } // 내 글의 지우기 버튼을 다시 그린다
+}
+
+function setupGoogleLogin() {
+  document.getElementById('google-login').addEventListener('click', googleLogin);
+  document.getElementById('google-logout').addEventListener('click', googleLogout);
+
+  var fromUrl = readLoginFromUrl();
+  var step;
+  if (fromUrl && fromUrl.error) {
+    document.getElementById('gb-auth-msg').textContent = '구글 로그인을 하지 못했어요: ' + fromUrl.error;
+    step = Promise.resolve();
+  } else if (fromUrl) {
+    step = fetchUser(fromUrl.access_token).then(function (user) {
+      fromUrl.user = user;
+      saveVisitor(fromUrl);
+    });
+  } else {
+    try { visitor = JSON.parse(storageGet(VISITOR_KEY) || 'null'); } catch (e) { visitor = null; }
+    step = visitor
+      ? getVisitorToken().then(fetchUser).then(function (user) { visitor.user = user; saveVisitor(visitor); })
+      : Promise.resolve();
+  }
+  step.catch(function () {
+    saveVisitor(null);
+    document.getElementById('gb-auth-msg').textContent = '로그인이 끝났어요. 다시 로그인해 주세요.';
+  }).then(updateAuthUI);
 }
 
 // ---------- 지우기 시험 (잠깐 쓰는 것) ----------
@@ -391,6 +583,7 @@ function setupDeleteTest() {
 function start() {
   setupGuestForm();
   setupDeleteTest();
+  setupGoogleLogin();
 
   Promise.all([
     getJson('profile?select=*&id=eq.1'),
