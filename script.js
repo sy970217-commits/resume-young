@@ -518,71 +518,9 @@ function setupGoogleLogin() {
   }).then(updateAuthUI);
 }
 
-// ---------- 지우기 시험 (잠깐 쓰는 것) ----------
-// 공개 키(방문자와 같은 권한)로 방명록 맨 위 글을 지워 보고, 결과를 그대로 보여 준다.
-function setupDeleteTest() {
-  var btn = document.getElementById('delete-test-btn');
-  var out = document.getElementById('delete-test-result');
-
-  btn.addEventListener('click', function () {
-    var target = null;
-    btn.disabled = true;
-    out.textContent = '시험하는 중…';
-
-    getJson('resume_guestbook?select=id,nickname,message,created_at&order=created_at.desc&limit=1')
-      .then(function (rows) {
-        if (!rows.length) { throw new Error('방명록이 비어 있어서 지울 글이 없어요.'); }
-        target = rows[0];
-        return api('resume_guestbook?id=eq.' + target.id, {
-          method: 'DELETE',
-          headers: { Prefer: 'return=representation' }
-        });
-      })
-      .then(function (res) {
-        return res.text().then(function (text) {
-          var deleted = null;
-          try {
-            var parsed = JSON.parse(text);
-            if (Array.isArray(parsed)) { deleted = parsed.length; }
-          } catch (e) { /* 배열이 아니면 지워진 줄 수를 알 수 없다 */ }
-
-          var verdict;
-          var reason = '없음';
-          if (!res.ok) {
-            verdict = '실패 (서버가 거절함)';
-            reason = text || '(빈 응답)';
-            deleted = 0; // 거절되면 아무것도 지워지지 않는다
-          } else if (deleted > 0) {
-            verdict = '성공 (글이 실제로 지워짐)';
-          } else {
-            verdict = '실패 (요청은 받아들여졌지만 지워진 글이 없음)';
-            reason = '서버 오류는 없었고, 규칙이 지울 수 있는 글을 0개로 걸렀어요. 서버 응답 그대로: ' + (text || '(빈 응답)');
-          }
-
-          out.textContent = [
-            '대상 글: id ' + target.id + ' · ' + target.nickname + ' · "' + target.message + '"',
-            '결과: ' + verdict,
-            'HTTP 상태: ' + res.status + (res.statusText ? ' ' + res.statusText : ''),
-            '지워진 줄 수: ' + (deleted === null ? '알 수 없음' : deleted),
-            '실패 이유: ' + reason
-          ].join('\n');
-
-          if (deleted > 0) {
-            return getJson('resume_guestbook?select=*&order=created_at.desc&limit=50').then(renderGuestbook);
-          }
-        });
-      })
-      .catch(function (err) {
-        out.textContent = '결과: 실패 (요청을 보내지 못함)\n실패 이유: ' + err.message;
-      })
-      .then(function () { btn.disabled = false; });
-  });
-}
-
 // ---------- 시작 ----------
 function start() {
   setupGuestForm();
-  setupDeleteTest();
   setupGoogleLogin();
 
   Promise.all([
